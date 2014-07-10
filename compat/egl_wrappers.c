@@ -8,15 +8,24 @@
 #  define WRAPPERS_DEBUG_PRINTF(...)
 #endif
 
+#include  <X11/Xlib.h>
+#include  <X11/Xatom.h>
+#include  <X11/Xutil.h>
+
+extern Display *x_display;
+extern Window      win;
+
 extern struct GlobalState global;
+
+#define MYHACK 1
 
 void *
 my_eglGetProcAddress(const char *procname)
 {
     WRAPPERS_DEBUG_PRINTF("eglGetProcAddress(%s)\n", procname);
     void *sym = get_hooked_symbol(procname, 1);
-    if (sym == NULL)
-        printf("eglGetProcAddress: unimplemented: %s\n", procname);
+    //if (sym == NULL)
+    //    printf("eglGetProcAddress: unimplemented: %s\n", procname);
     return sym;
 }
 
@@ -30,12 +39,14 @@ EGLDisplay my_eglGetDisplay(EGLNativeDisplayType display_id)
 {
     WRAPPERS_DEBUG_PRINTF("eglGetDisplay(%x)\n", (int)display_id);
     if(global.be_surfaceflinger) {
+#if MYHACK
         if(EGL_DEFAULT_DISPLAY == display_id) {
-            // TODO
-            fprintf(stderr, "TODO: surfaceflinger: render to a window\n");
-            return eglGetDisplay(display_id);
+            printf("eglGetDisplay XXX\n");
+            return eglGetDisplay((EGLNativeDisplayType)x_display);
         }
-        else return eglGetDisplay(display_id);
+        else
+#endif
+            return eglGetDisplay(display_id);
     }
     else {
         return (void *)0xc00fa15e;
@@ -79,15 +90,38 @@ EGLBoolean my_eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config,
 			      EGLint attribute, EGLint *value)
 {
     WRAPPERS_DEBUG_PRINTF("eglGetConfigAttrib\n");
+#if MYHACK
+    // TODO: hacky hack
+    if(EGL_NATIVE_VISUAL_ID == attribute) {
+        printf("TODO: eglGetConfigAttrib hacky hack\n");
+        eglGetConfigAttrib(dpy,config,attribute,value);
+        if(*value == 33) *value = 4;
+        return EGL_TRUE;
+    }
+#endif
     return eglGetConfigAttrib(dpy,config,attribute,value);
 }
 
 EGLSurface my_eglCreateWindowSurface(EGLDisplay dpy, EGLConfig config,
-				  EGLNativeWindowType win,
+				  EGLNativeWindowType window,
 				  const EGLint *attrib_list)
 {
     WRAPPERS_DEBUG_PRINTF("eglCreateWindowSurface\n");
-    return eglCreateWindowSurface(dpy,config,win,attrib_list);
+#if MYHACK
+    if(global.be_surfaceflinger) {
+        // HACK: we always pass our X11 window handle to eglCreateWindowSurface
+        // we should probably check if window is the window we want to replace
+        // NOTE: there is only one call to eglCreateWindowSurface in
+        // surfaceflinger, so this should be fine for now.
+        printf("eglCreateWindowSurface XXX\n");
+        return eglCreateWindowSurface(dpy,config,win,attrib_list);
+    }
+    else {
+#endif
+        return eglCreateWindowSurface(dpy,config,window,attrib_list);
+#if MYHACK
+    }
+#endif
 }
 
 EGLSurface my_eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig config,

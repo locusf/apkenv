@@ -40,6 +40,10 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
+#include  <X11/Xlib.h>
+#include  <X11/Xatom.h>
+#include  <X11/Xutil.h>
+
 #include "jni/jnienv.h"
 #include "jni/shlib.h"
 #include "apklib/apklib.h"
@@ -395,10 +399,81 @@ int parse_eglcfg()
     return 0; // failed
 }
 
+Display    *x_display;
+Window      win;
+
 void run_surfaceflinger()
 {
     int (*surfaceflinger_main)(int argc, char** argv);
     void *surfaceflinger_handle;
+
+    x_display = XOpenDisplay(NULL);
+
+    if(NULL == x_display) {
+        printf("failed to connect to the X server\n");
+        return;
+    }
+ 
+   Window root  =  DefaultRootWindow( x_display );   // get the root window (usually the whole screen)
+ 
+   XSetWindowAttributes  swa;
+   swa.event_mask  =  ExposureMask | PointerMotionMask | KeyPressMask;
+ 
+   win  =  XCreateWindow (   // create a window with the provided parameters
+              x_display, root,
+              0, 0, 854, 480,   0,
+              CopyFromParent, InputOutput,
+              CopyFromParent, CWEventMask,
+              &swa );
+ 
+   XSetWindowAttributes  xattr;
+   Atom  atom;
+   int   one = 1;
+ 
+   xattr.override_redirect = False;
+   XChangeWindowAttributes ( x_display, win, CWOverrideRedirect, &xattr );
+ 
+   atom = XInternAtom ( x_display, "_NET_WM_STATE_FULLSCREEN", True );
+   XChangeProperty (
+      x_display, win,
+      XInternAtom ( x_display, "_NET_WM_STATE", True ),
+      XA_ATOM,  32,  PropModeReplace,
+      (unsigned char*) &atom,  1 );
+#if 0 
+   XChangeProperty (
+      x_display, win,
+      XInternAtom ( x_display, "_HILDON_NON_COMPOSITED_WINDOW", True ),
+      XA_INTEGER,  32,  PropModeReplace,
+      (unsigned char*) &one,  1);
+#endif
+ 
+   XWMHints hints;
+   hints.input = True;
+   hints.flags = InputHint;
+   XSetWMHints(x_display, win, &hints);
+ 
+   XMapWindow ( x_display , win );             // make the window visible on the screen
+   XStoreName ( x_display , win , "GL test" ); // give the window a name
+ 
+   //// get identifiers for the provided atom name strings
+   Atom wm_state   = XInternAtom ( x_display, "_NET_WM_STATE", False );
+   Atom fullscreen = XInternAtom ( x_display, "_NET_WM_STATE_FULLSCREEN", False );
+ 
+   XEvent xev;
+   memset ( &xev, 0, sizeof(xev) );
+ 
+   xev.type                 = ClientMessage;
+   xev.xclient.window       = win;
+   xev.xclient.message_type = wm_state;
+   xev.xclient.format       = 32;
+   xev.xclient.data.l[0]    = 1;
+   xev.xclient.data.l[1]    = fullscreen;
+   XSendEvent (                // send an event mask to the X-server
+      x_display,
+      DefaultRootWindow ( x_display ),
+      False,
+      SubstructureNotifyMask,
+      &xev );
 
     if(!parse_eglcfg()) {
         printf("failed to parse egl.cfg\n");
