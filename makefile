@@ -3,6 +3,41 @@ TARGET := apkenv
 # Default target, make sure this is always first
 all: $(TARGET) modules
 
+ifeq ($(origin PKG_CONFIG), undefined)
+  PKG_CONFIG = $(CROSS_COMPILE)pkg-config
+  ifeq ($(shell which $(PKG_CONFIG) 2>/dev/null),)
+    $(error $(PKG_CONFIG) not found)
+  endif
+endif
+
+ifeq ($(origin LIBPNG_CFLAGS) $(origin LIBPNG_LDLIBS), undefined undefined)
+  ifeq ($(shell $(PKG_CONFIG) --modversion libpng 2>/dev/null),)
+    $(error No libpng development libraries found!)
+  else ifeq ($(shell $(PKG_CONFIG) --modversion libpng | grep -o "[0-9]\.[0-9]" 2>/dev/null),1.2)
+	CFLAGS += -DLIBPNG_LEGACY
+  endif
+  LIBPNG_CFLAGS += $(shell $(PKG_CONFIG) --cflags libpng)
+  LIBPNG_LDLIBS +=  $(shell $(PKG_CONFIG) --libs libpng)
+endif
+CFLAGS += $(LIBPNG_CFLAGS)
+LDFLAGS += $(LIBPNG_LDLIBS)
+
+ifeq ($(origin SDL_CFLAGS) $(origin SDL_LDLIBS), undefined undefined)
+  SDL_CONFIG = $(CROSS_COMPILE)sdl2-config
+  ifeq ($(shell which $(SDL_CONFIG) 2>/dev/null),)
+    SDL_CONFIG = $(CROSS_COMPILE)sdl-config
+    ifeq ($(shell which $(SDL_CONFIG) 2>/dev/null),)
+      $(error No SDL development libraries found!)
+    else
+      $(warning Using SDL 1.2 libraries)
+    endif
+  endif
+  SDL_CFLAGS  += $(shell $(SDL_CONFIG) --cflags)
+  SDL_LDLIBS += $(shell $(SDL_CONFIG) --libs)
+endif
+CFLAGS += $(SDL_CFLAGS)
+LDFLAGS += $(SDL_LDLIBS)
+
 # Build configuration
 include config.mk
 
